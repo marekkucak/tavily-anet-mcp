@@ -1,0 +1,6 @@
+/target
+.env
+Scratchpad.txt
+flatten.sh
+collected_code.txt
+check-tavily-api-key.sh
