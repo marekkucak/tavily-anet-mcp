@@ -2,19 +2,16 @@ mod models;
 mod tools;
 mod utils;
 
+use anet_mcp_server::{ServerBuilder, ServerCapabilities, transport::nats::NatsTransport};
 use anyhow::Result;
-use anet_mcp_server::{
-    ServerBuilder, ServerCapabilities, 
-    transport::nats::NatsTransport,
-};
+use dotenv::dotenv;
 use serde_json::json;
 use std::env;
-use tracing::{info, warn, error, debug};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
-use dotenv::dotenv;
 
-use crate::tools::search::TavilySearchTool;
 use crate::tools::extract::TavilyExtractTool;
+use crate::tools::search::TavilySearchTool;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -38,44 +35,55 @@ async fn main() -> Result<()> {
         .init();
 
     info!("Starting Tavily MCP server");
-    
+
     // Get API key from environment variable with detailed error handling
     let api_key = match env::var("TAVILY_API_KEY") {
         Ok(key) => {
             if key.trim().is_empty() {
                 error!("TAVILY_API_KEY is set but empty!");
-                return Err(anyhow::anyhow!("TAVILY_API_KEY environment variable is empty"));
+                return Err(anyhow::anyhow!(
+                    "TAVILY_API_KEY environment variable is empty"
+                ));
             }
-            
+
             if key == "your_api_key_here" {
-                error!("TAVILY_API_KEY is set to the placeholder 'your_api_key_here'. Please replace with your actual API key.");
-                return Err(anyhow::anyhow!("TAVILY_API_KEY is set to the example placeholder. Please use your actual API key."));
+                error!(
+                    "TAVILY_API_KEY is set to the placeholder 'your_api_key_here'. Please replace with your actual API key."
+                );
+                return Err(anyhow::anyhow!(
+                    "TAVILY_API_KEY is set to the example placeholder. Please use your actual API key."
+                ));
             }
-            
-            info!("Found TAVILY_API_KEY: {}...", key.chars().take(5).collect::<String>());
+
+            info!(
+                "Found TAVILY_API_KEY: {}...",
+                key.chars().take(5).collect::<String>()
+            );
             key
-        },
+        }
         Err(e) => {
             error!("Failed to get TAVILY_API_KEY environment variable: {}", e);
             error!("Please set your API key in the .env file or environment");
-            return Err(anyhow::anyhow!("TAVILY_API_KEY environment variable is required"));
+            return Err(anyhow::anyhow!(
+                "TAVILY_API_KEY environment variable is required"
+            ));
         }
     };
-    
+
     // Create NATS transport
     let nats_url = env::var("NATS_URL").unwrap_or_else(|_| "nats://localhost:4222".to_string());
     let subject = env::var("MCP_SUBJECT").unwrap_or_else(|_| "mcp.requests".to_string());
-    
+
     info!("Connecting to NATS at {} on subject {}", nats_url, subject);
     let transport = NatsTransport::new(&nats_url, &subject).await?;
     info!("Successfully connected to NATS");
-    
+
     // Initialize tools
     info!("Initializing Tavily Search tool...");
     let search_tool = TavilySearchTool::new(api_key.clone())?;
     info!("Initializing Tavily Extract tool...");
     let extract_tool = TavilyExtractTool::new(api_key)?;
-    
+
     // Build and run server
     info!("Building MCP server...");
     let server = ServerBuilder::new()

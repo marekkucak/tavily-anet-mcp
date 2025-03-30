@@ -1,9 +1,9 @@
+use anet_mcp_server::{Content, Tool};
 use anyhow::Result;
 use async_trait::async_trait;
-use anet_mcp_server::{Content, Tool};
 use reqwest::Client;
-use serde_json::{json, Value};
-use tracing::{error, debug};
+use serde_json::{Value, json};
+use tracing::{debug, error};
 
 use crate::models::tavily::TavilyResponse;
 use crate::utils::formatter::format_tavily_results;
@@ -16,23 +16,19 @@ pub struct TavilySearchTool {
 
 impl TavilySearchTool {
     pub fn new(api_key: String) -> Result<Self> {
-        debug!("Creating TavilySearchTool with API key: {}", api_key.chars().take(5).collect::<String>() + "...");
-        
+        debug!(
+            "Creating TavilySearchTool with API key: {}",
+            api_key.chars().take(5).collect::<String>() + "..."
+        );
+
         let client = Client::new();
 
-        Ok(Self {
-            api_key,
-            client,
-        })
+        Ok(Self { api_key, client })
     }
 
     async fn search(&self, params: Value) -> Result<TavilyResponse> {
-        // Add API key to parameters in the JSON body
         let mut search_params = params.clone();
-        search_params["api_key"] = json!(self.api_key);
-        
-        debug!("Search parameters: {}", serde_json::to_string_pretty(&search_params)?);
-        
+
         // Add news topic if query contains "news"
         if let Some(query) = params.get("query").and_then(|q| q.as_str()) {
             if query.to_lowercase().contains("news") && !search_params.get("topic").is_some() {
@@ -40,16 +36,22 @@ impl TavilySearchTool {
             }
         }
 
-        debug!("Sending request to Tavily API with API key in request body");
-        
-        let response = self.client
+        debug!(
+            "Search parameters: {}",
+            serde_json::to_string_pretty(&search_params)?
+        );
+        debug!("Sending request to Tavily API with API key in Authorization header");
+
+        let response = self
+            .client
             .post("https://api.tavily.com/search")
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&search_params)
             .send()
             .await?;
 
         debug!("Tavily API response status: {}", response.status());
-        
+
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await?;
@@ -144,16 +146,18 @@ impl Tool for TavilySearchTool {
 
     async fn call(&self, input: Option<Value>) -> Result<Vec<Content>> {
         let params = input.unwrap_or_else(|| json!({}));
-        
-        debug!("TavilySearchTool call with params: {}", serde_json::to_string_pretty(&params)?);
-        
+
+        debug!(
+            "TavilySearchTool call with params: {}",
+            serde_json::to_string_pretty(&params)?
+        );
+
         match self.search(params).await {
             Ok(response) => {
-                // Format the response similar to the JS implementation
                 let formatted = format_tavily_results(&response);
                 debug!("Successfully formatted Tavily search results");
                 Ok(vec![Content::Text { text: formatted }])
-            },
+            }
             Err(e) => {
                 error!("Tavily search error: {}", e);
                 Err(e)

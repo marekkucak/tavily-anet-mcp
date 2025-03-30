@@ -1,9 +1,9 @@
-use anyhow::{Result, Context};
-use async_trait::async_trait;
 use anet_mcp_server::{Content, Tool};
+use anyhow::{Context, Result};
+use async_trait::async_trait;
 use reqwest::Client;
-use serde_json::{json, Value};
-use tracing::{error, debug};
+use serde_json::{Value, json};
+use tracing::{debug, error};
 
 use crate::models::tavily::TavilyExtractResponse;
 use crate::utils::formatter::format_tavily_extract_results;
@@ -16,31 +16,34 @@ pub struct TavilyExtractTool {
 
 impl TavilyExtractTool {
     pub fn new(api_key: String) -> Result<Self> {
-        debug!("Creating TavilyExtractTool with API key: {}", api_key.chars().take(5).collect::<String>() + "...");
-        
+        debug!(
+            "Creating TavilyExtractTool with API key: {}",
+            api_key.chars().take(5).collect::<String>() + "..."
+        );
+
         let client = Client::new();
 
-        Ok(Self {
-            api_key,
-            client,
-        })
+        Ok(Self { api_key, client })
     }
 
     async fn extract(&self, params: Value) -> Result<TavilyExtractResponse> {
-        // Add API key to parameters in the JSON body
-        let mut extract_params = params.clone();
-        extract_params["api_key"] = json!(self.api_key);
-    
-        debug!("Extract parameters: {}", serde_json::to_string_pretty(&extract_params)?);
+        let extract_params = params.clone();
 
-        let response = self.client
+        debug!(
+            "Extract parameters: {}",
+            serde_json::to_string_pretty(&extract_params)?
+        );
+
+        let response = self
+            .client
             .post("https://api.tavily.com/extract")
+            .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&extract_params)
             .send()
             .await?;
 
         debug!("Tavily API response status: {}", response.status());
-    
+
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await?;
@@ -51,10 +54,10 @@ impl TavilyExtractTool {
         // For debugging the exact response format
         let response_text = response.text().await?;
         debug!("Raw extract API response: {}", response_text);
-    
+
         let extract_response = serde_json::from_str::<TavilyExtractResponse>(&response_text)
             .context("Failed to parse Tavily extract response")?;
-    
+
         debug!("Successfully parsed Tavily API extract response");
         Ok(extract_response)
     }
@@ -97,13 +100,13 @@ impl Tool for TavilyExtractTool {
 
     async fn call(&self, input: Option<Value>) -> Result<Vec<Content>> {
         let params = input.unwrap_or_else(|| json!({}));
-    
+
         match self.extract(params).await {
             Ok(response) => {
                 // Format the response with the extract-specific formatter
                 let formatted = format_tavily_extract_results(&response);
                 Ok(vec![Content::Text { text: formatted }])
-            },
+            }
             Err(e) => {
                 error!("Tavily extract error: {}", e);
                 Err(e)
