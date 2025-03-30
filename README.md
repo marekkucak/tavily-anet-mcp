@@ -167,4 +167,4 @@ MIT License
 
 ## Acknowledgements
 
-This project is built on top of the [Anet MCP Server](https://github.com/yourusername/anet-mcp-server) framework and integrates with the [Tavily API](https://tavily.com).
+This project is built on top of the [Anet MCP Server](https://github.com/marekkucak/anet-mcp-server) framework and integrates with the [Tavily API](https://tavily.com).
